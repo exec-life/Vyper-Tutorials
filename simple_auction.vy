@@ -58,3 +58,41 @@ def bid():
     # Track new high bid
     self.highestBidder = msg.sender
     self.highestBid = msg.value
+
+# Withdraw a previously refunded bid. The withdraw pattern is
+# used here to avoid a security issue. If refunds were directly
+# sent as part of bid(), a malicious bidding contract could block
+# those refunds and thus block new higher bids from coming in.
+@external
+def withdraw():
+    pending_amount: uint256 = self.pendingReturns[msg.sender]
+    self.pendingReturns[msg.sender] = 0
+    send(msg.sender, pending_amount)
+
+# End the auction and payout the highest bid to beneficiary
+@external
+def endAuction():
+    # It is a good idea to structure the functions that interact
+    # with other contracts (i.e. they call functions or payout Ether)
+    # into three phases:
+    # 1. checking conditions
+    # 2. performing actions (potentially changing conditions)
+    # 3. interacting with other contracts
+    # If these phases are mixed up, the other contract could call
+    # back into the current contract and modify the state or cause
+    # effects (Ether payout) to be performed multiple times.
+    # If functions called internally include interaction with external
+    # contracts, they also have to be considered interaction with
+    # external contracts.
+
+    # 1. Conditions
+    # Check if auction endtime has been reached
+    assert block.timestamp >= self.auctionEnd
+    # Check if this function has already been called
+    assert not self.ended
+
+    # 2. Effects
+    self.ended = True
+
+    # 3. Interaction
+    send(self.beneficiary, self.highestBid)
